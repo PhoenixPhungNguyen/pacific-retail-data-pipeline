@@ -1,0 +1,77 @@
+CREATE OR REPLACE PROCEDURE process_orders_changes()
+RETURNS STRING 
+LANGUAGE SQL
+AS
+$$
+DECLARE 
+    rows_inserted INT;
+    rows_updated  INT;
+BEGIN
+    MERGE INTO ORDERS AS target
+    USING (
+        SELECT
+            customer_id,
+            payment_method,
+            product_id,
+            CASE 
+                WHEN quantity >= 0 THEN quantity
+                ELSE 0
+            END AS quantity,
+            store_type,
+            CASE 
+                WHEN total_amount >= 0 THEN total_amount
+                ELSE 0
+            END AS total_amount,
+            transaction_date,
+            transaction_id,
+            current_timestamp() AS last_updated_timestamp 
+        FROM
+            PACIFIC_RETAIL_DB.BRONZE.orders_change_stream
+        WHERE product_id IS NOT NULL and customer_id IS NOT NULL
+    ) AS source
+    ON target.product_id = source.product_id AND target.customer_id = source.customer_id
+    WHEN MATCHED THEN
+        UPDATE SET
+            payment_method = source.payment_method,
+            quantity = source.quantity,
+            store_type = source.store_type,
+            total_amount = source.total_amount,
+            transaction_date = source.transaction_date,
+            transaction_id = source.transaction_id,
+            last_updated_timestamp = source.last_updated_timestamp  
+    WHEN NOT MATCHED THEN
+        INSERT(
+            customer_id,
+            payment_method,
+            product_id,
+            quantity,
+            store_type,
+            total_amount,
+            transaction_date,
+            transaction_id,
+            last_updated_timestamp)
+        VALUES(
+            source.customer_id,
+            source.payment_method,
+            source.product_id,
+            source.quantity,
+            source.store_type,
+            source.total_amount,
+            source.transaction_date,
+            source.transaction_id,
+            source.last_updated_timestamp);
+    RETURN 'Orders processed!' ;
+END;
+$$;
+
+CREATE OR REPLACE TASK silver_orders_merge_task
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = 'USING CRON 0 */4 * * * UTC'
+AS
+    CALL process_orders_changes();
+
+ALTER TASK silver_orders_merge_task RESUME;
+--check
+DESC TASK silver_orders_merge_task;
+--stop
+ALTER TASK silver_orders_merge_task SUSPEND;

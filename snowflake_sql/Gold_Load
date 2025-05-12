@@ -1,0 +1,20 @@
+CREATE SCHEMA GOLD;
+
+USE SCHEMA BRONZE;
+SELECT * FROM CUSTOMER;
+--TRUNCATE TABLE CUSTOMER; --delete table and is faster than delete
+EXECUTE TASK load_customer_data_task;
+SELECT * FROM customer_change_stream;
+
+USE SCHEMA SILVER;
+EXECUTE TASK silvet_customer_merge_task;
+SELECT * FROM CUSTOMER;
+
+--Product
+SELECT * FROM PRODUCT;
+EXECUTE TASK load_product_data_task;
+SELECT * FROM product_change_stream;
+--Order
+SELECT * FROM ORDERS;
+EXECUTE TASK load_orders_data_task;
+SELECT * FROM orders_change_stream;

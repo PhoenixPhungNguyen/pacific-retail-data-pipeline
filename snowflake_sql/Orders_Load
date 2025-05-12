@@ -1,0 +1,83 @@
+CREATE OR REPLACE FILE FORMAT parquet_file_format
+    TYPE = PARQUET
+    --FIELD_DELIMITER = ','
+    --SKIP_HEADER = 1
+    --NULL_IF = ('NULL','null','')
+    --EMPTY_FIELD_AS_NULL= TRUE
+    COMPRESSION = AUTO
+    --Add if json file
+    --STRIP_OUTER_ARRAY = TRUE
+    --Add if json file file
+    --IGNORE_UTF8_ERRORS =TRUE
+    --Add if parquet file
+    BINARY_AS_TEXT = FALSE -- because binary is image
+    TRIM_SPACE = FALSE; --must not delete space
+    
+ls @adls_stage;
+
+SELECT * --$1 --,$2,$3,$4,$5,$6
+FROM @adls_stage/Order/  -- must add / if Order  --Product --Customer
+    (FILE_FORMAT => parquet_file_format)
+LIMIT 10;
+
+CREATE OR REPLACE TABLE ORDERS
+(
+    customer_id INT,
+    payment_method  STRING,
+    product_id INT,
+    quantity INT,
+    store_type STRING,
+    total_amount NUMBER(10,2),
+    transaction_date DATE,
+    transaction_id STRING,
+    source_file_name STRING,    --from sys
+    source_file_row_number INT, --from sys
+    ingestion_time TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() --from sys
+);
+
+CREATE OR REPLACE TASK load_orders_data_task
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS 
+    COPY INTO ORDERS
+    (
+        customer_id,
+        payment_method,
+        product_id,
+        quantity,
+        store_type,
+        total_amount,
+        transaction_date,
+        transaction_id,
+        source_file_name,       --from sys
+        source_file_row_number, --from sys
+        ingestion_time          --from sys
+    ) FROM 
+    (
+        SELECT 
+            $1:customer_id::INT,
+            $1:payment_method::STRING,
+            $1:product_id::INT,
+            $1:quantity::INT,
+            $1:store_type::STRING,
+            $1:total_amount::NUMBER(10,2),
+            $1:transaction_date::DATE,
+            $1:transaction_id::STRING,
+            metadata$filename,
+            metadata$file_row_number
+        FROM @adls_stage/Order
+    )
+    FILE_FORMAT = (FORMAT_NAME = parquet_file_format)
+    ON_ERROR = 'CONTINUE'
+    PATTERN = '.*[.]parquet'; -- any file * has .parquet
+
+DESC TASK load_orders_data_task;
+--state is SUSPENDED , -->activate task
+ALTER TASK load_orders_data_task RESUME;
+--stop task
+ALTER TASK load_orders_data_task SUSPEND;
+--state is started
+DESC TASK load_orders_data_task;
+
+
+    

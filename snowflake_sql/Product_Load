@@ -1,0 +1,79 @@
+CREATE OR REPLACE FILE FORMAT json_file_format
+    TYPE = JSON
+    --FIELD_DELIMITER = ','
+    --SKIP_HEADER = 1
+    --NULL_IF = ('NULL','null','')
+    --EMPTY_FIELD_AS_NULL= TRUE
+    --COMPRESSION = AUTO;
+    --Add if json file
+    STRIP_OUTER_ARRAY = TRUE
+    IGNORE_UTF8_ERRORS =TRUE;
+
+ls @adls_stage;
+
+SELECT $1 --,$2,$3,$4,$5,$6
+FROM @adls_stage/Product --Customer
+    (FILE_FORMAT => json_file_format)
+LIMIT 10;
+
+CREATE OR REPLACE TABLE PRODUCT
+(
+    product_id INT,
+    name STRING,
+    brand STRING,
+    category STRING,
+    is_active BOOLEAN,
+    price INT,
+    rating FLOAT,
+    stock_quantity INT,
+    source_file_name STRING,    --from sys
+    source_file_row_number INT, --from sys
+    ingestion_time TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() --from sys
+);
+
+CREATE OR REPLACE TASK load_product_data_task
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = 'USING CRON 0 2 * * * UTC'
+AS 
+    COPY INTO PRODUCT
+    (
+        product_id,
+        name,
+        brand,
+        category,
+        is_active,
+        price,
+        rating,
+        stock_quantity,
+        source_file_name,       --from sys
+        source_file_row_number, --from sys
+        ingestion_time          --from sys
+    ) FROM 
+    (
+        SELECT 
+            $1:product_id::INT,
+            $1:name::STRING,
+            $1:brand::STRING,
+            $1:category::STRING,
+            $1:is_active::BOOLEAN,
+            $1:price::INT,
+            $1:rating::FLOAT,
+            $1:stock_quantity::INT,
+            metadata$filename,
+            metadata$file_row_number
+        FROM @adls_stage/Product
+    )
+    FILE_FORMAT = (FORMAT_NAME = json_file_format)
+    ON_ERROR = 'CONTINUE'
+    PATTERN = '.*[.]json'; -- any file * has .json
+
+DESC TASK load_product_data_task;
+--state is SUSPENDED , -->activate task
+ALTER TASK load_product_data_task RESUME;
+--stop task
+ALTER TASK load_product_data_task SUSPEND;
+--state is started
+DESC TASK load_product_data_task;
+
+
+    

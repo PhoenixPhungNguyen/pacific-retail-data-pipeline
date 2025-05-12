@@ -1,0 +1,90 @@
+CREATE OR REPLACE PROCEDURE process_customer_changes()
+RETURNS STRING 
+LANGUAGE SQL
+AS
+$$
+DECLARE 
+    rows_inserted INT;
+    rows_updated  INT;
+BEGIN
+    MERGE INTO CUSTOMER AS target
+    USING (
+        SELECT
+            customer_id,
+            name,
+            email,
+            country,
+            CASE
+                WHEN TRIM(UPPER(customer_type)) IN('REG','R','REG') THEN 'Regular'
+                WHEN TRIM(UPPER(customer_type)) IN('PREMIUM','P','PREM') THEN 'Premium'
+                ELSE 'Unknown'
+            END AS customer_type,
+            registration_date,
+            CASE
+                WHEN age BETWEEN 18 AND 120 THEN age
+                ELSE NULL
+            END AS age,
+            CASE
+                WHEN TRIM(UPPER(gender)) IN('MALE','M') THEN 'Male'
+                WHEN TRIM(UPPER(gender)) IN('FEMALE','F') THEN 'Female'
+                ELSE 'Other'
+            END AS gender,
+            CASE
+                WHEN total_purchase >=0 THEN total_purchases
+                ELSE 0
+            END AS total_purchase,
+            current_timestamp() AS last_updated_timestamp 
+        FROM
+            PACIFIC_RETAIL_DB.BRONZE.customer_change_stream
+        WHERE customer_id IS NOT NULL and email IS NOT NULL
+    ) AS source
+    ON target.customer_id = source.customer_id
+    WHEN MATCHED THEN
+        UPDATE SET
+            name = source.name,
+            email = source.email,
+            country = source.country,
+            customer_type = source.customer_type,
+            registration_date = source.registration_date,
+            age = source.age,
+            gender = source.gender,
+            total_purchase = source.total_purchase,
+            last_updated_timestamp = source.last_updated_timestamp  
+    WHEN NOT MATCHED THEN
+        INSERT(
+            customer_id,
+            name,
+            email,
+            country,
+            customer_type,
+            registration_date,
+            age,
+            gender,
+            total_purchase,
+            last_updated_timestamp)
+        VALUES(
+            source.customer_id,
+            source.name,
+            source.email,
+            source.country,
+            source.customer_type,
+            source.registration_date,
+            source.age,
+            source.gender,
+            source.total_purchase,
+            source.last_updated_timestamp);
+    RETURN 'Customers processed!' ;
+END;
+$$;
+
+CREATE OR REPLACE TASK silver_customer_merge_task
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = 'USING CRON 0 */4 * * * UTC'
+AS
+    CALL process_customer_changes();
+
+ALTER TASK silver_customer_merge_task RESUME;
+--check
+DESC TASK silver_customer_merge_task;
+--stop
+ALTER TASK silver_customer_merge_task SUSPEND;

@@ -1,0 +1,81 @@
+CREATE OR REPLACE PROCEDURE process_product_changes()
+RETURNS STRING 
+LANGUAGE SQL
+AS
+$$
+DECLARE 
+    rows_inserted INT;
+    rows_updated  INT;
+BEGIN
+    MERGE INTO PRODUCT AS target
+    USING (
+        SELECT
+            product_id,
+            name,
+            brand,
+            category,
+            is_active,
+            CASE
+                WHEN price >0 THEN price
+                ELSE 0
+            END AS price,
+            CASE 
+                WHEN rating BETWEEN 0 AND 5 THEN rating
+                ELSE NULL
+            END AS rating,
+            CASE 
+                WHEN stock_quantity >= 0 THEN stock_quantity
+                ELSE 0
+            END AS stock_quantity,
+            current_timestamp() AS last_updated_timestamp 
+        FROM
+            PACIFIC_RETAIL_DB.BRONZE.product_change_stream
+        WHERE product_id IS NOT NULL
+    ) AS source
+    ON target.product_id = source.product_id
+    WHEN MATCHED THEN
+        UPDATE SET
+            name = source.name,
+            brand = source.brand,
+            category = source.category,
+            is_active = source.is_active,
+            price = source.price,
+            rating = source.rating,
+            stock_quantity = source.stock_quantity,
+            last_updated_timestamp = source.last_updated_timestamp  
+    WHEN NOT MATCHED THEN
+        INSERT(
+            product_id,
+            name,
+            brand,
+            category,
+            is_active,
+            price,
+            rating,
+            stock_quantity,
+            last_updated_timestamp)
+        VALUES(
+            source.product_id,
+            source.name,
+            source.brand,
+            source.category,
+            source.is_active,
+            source.price,
+            source.rating,
+            source.stock_quantity,
+            source.last_updated_timestamp);
+    RETURN 'Products processed!' ;
+END;
+$$;
+
+CREATE OR REPLACE TASK silver_product_merge_task
+    WAREHOUSE = COMPUTE_WH
+    SCHEDULE = 'USING CRON 0 */4 * * * UTC'
+AS
+    CALL process_product_changes();
+
+ALTER TASK silver_product_merge_task RESUME;
+--check
+DESC TASK silver_product_merge_task;
+--stop
+ALTER TASK silver_product_merge_task SUSPEND;

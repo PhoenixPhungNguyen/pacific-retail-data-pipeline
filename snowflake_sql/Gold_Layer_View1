@@ -1,0 +1,7 @@
+CREATE OR REPLACE VIEW SALES_ANALYSIS
+AS
+    SELECT 
+        c.customer_id,
+        c.customer_type
+    FROM SILVER.CUSTOMER c
+    

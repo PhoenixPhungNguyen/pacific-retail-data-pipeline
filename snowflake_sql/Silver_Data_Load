@@ -1,0 +1,50 @@
+USE DATABASE PACIFIC_RETAIL_DB;
+CREATE SCHEMA SILVER;
+USE SCHEMA SILVER;
+
+--copy from Customer_Load and change
+CREATE OR REPLACE TABLE CUSTOMER
+(
+    customer_id INT,
+    name STRING,
+    email STRING,
+    country STRING,
+    customer_type STRING,
+    registration_date DATE,
+    age INT,
+    gender STRING,
+    total_purchase INT,
+    --source_file_name STRING,    --from sys
+    --source_file_row_number INT, --from sys
+    last_updated_timestamp TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() --from sys, change name from ingestion_time
+);
+
+CREATE OR REPLACE TABLE PRODUCT
+(
+    product_id INT,
+    name STRING,
+    brand STRING,
+    category STRING,
+    is_active BOOLEAN,
+    price INT,
+    rating FLOAT,
+    stock_quantity INT,
+    --source_file_name STRING,    --from sys
+    --source_file_row_number INT, --from sys
+    last_updated_timestamp TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() --from sys, change name from ingestion_time
+);
+
+CREATE OR REPLACE TABLE ORDERS
+(
+    customer_id INT,
+    payment_method  STRING,
+    product_id INT,
+    quantity INT,
+    store_type STRING,
+    total_amount NUMBER(10,2),
+    transaction_date DATE,
+    transaction_id STRING,
+    --source_file_name STRING,    --from sys
+    --source_file_row_number INT, --from sys
+    last_updated_timestamp TIMESTAMP_NTZ DEFAULT CURRENT_TIMESTAMP() --from sys, change name from ingestion_time
+);

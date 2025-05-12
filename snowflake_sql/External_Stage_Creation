@@ -1,0 +1,45 @@
+USE DATABASE PACIFIC_RETAIL_DB;
+USE SCHEMA BRONZE;
+--STEP1: AZURE: CREATE RESOURCE GROUP: phoenix-pacificretail
+--  CREATE STOREAGE ACCOUNT DATALAKE: phoenicpacificretaildl
+--  CREATE CONTAINER landing, 3 folder Customer,Production, Order and upload 3 files into this folder
+
+--STEP2: SNOWFLAKE
+--RUN ON MACBOOK : COMMAND + ENTER
+--create storage integration: allow snowflake connect to Azure Data Lake Storage Gen2 in Azure
+CREATE OR REPLACE STORAGE INTEGRATION azure_pacific_retail_integration
+    TYPE = EXTERNAL_STAGE
+    STORAGE_PROVIDER = AZURE
+    ENABLED = TRUE
+    --agent id: vao azure --> entra id: 8b928044-38bf-48d3-a0ba-d7be9dda1193
+    --storage acc: vao thu muc container--> landing --> properties:lay url
+    AZURE_TENANT_ID = '8b928044-38bf-48d3-a0ba-d7be9dda1193'
+    --https://pacificretaildl.blob.core.windows.net/landing
+    --change https -->azure
+    STORAGE_ALLOWED_LOCATIONS = ('azure://pacificretaildl.blob.core.windows.net/landing')
+
+DESC STORAGE INTEGRATION azure_pacific_retail_integration
+--Click on link of No7.AZURE_CONSENT_URT to authentication connect to azure
+-- Copy AZURE_MULTI_TENANT_APP_NAME:2rwnhasnowflakepacint
+
+--STEP3: CREATE ASSIGNMENT TO ALLOW SNOWFLAKE TO READ DATA FROM DATALAKE STORAGE OF AZURE
+--Home> Storage Account>pacificretaildl>Containers>landing> Access Control(IAM)
+--Add Role Assignment
+-- Select member: Copy AZURE_MULTI_TENANT_APP_NAME:2rwnhasnowflakepacint of step2 to paste app
+
+--STEP4: CREATE DB_BRONZE_SCHEMA :new work sheet
+--STEP5: CREATE STAGE
+CREATE OR REPLACE STAGE adls_stage
+STORAGE_INTEGRATION = azure_pacific_retail_integration
+URL = 'azure://pacificretaildl.blob.core.windows.net/landing';
+
+
+
+
+
+
+
+
+
+
+
